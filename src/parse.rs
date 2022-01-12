@@ -190,7 +190,7 @@ fn literal(input: &str) -> IResult<&str, Literal> {
     ))(input)
 }
 
-/// Parse a simple value: `literal | reference | expr`.
+/// Parse a simple value: `literal | reference | '(' expr ')'`.
 fn simple_value(input: &str) -> IResult<&str, Value> {
     alt((
         map(literal, Value::Literal),
