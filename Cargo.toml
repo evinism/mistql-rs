@@ -6,3 +6,4 @@ authors = ["Zac Stringham"]
 license = "MIT OR Apache-2.0"
 
 [dependencies]
+nom = "7.1"
