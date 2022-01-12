@@ -39,7 +39,7 @@ pub enum BinaryOp {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expression<'a> {
-    Value(Box<Value<'a>>),
+    Value(Value<'a>),
     UnaryOp(UnaryOp, Box<Expression<'a>>),
     BinaryOp(BinaryOp, Box<Expression<'a>>, Box<Expression<'a>>),
     Dot(Box<Expression<'a>>, Reference<'a>),
@@ -76,7 +76,7 @@ pub enum Value<'a> {
     None,
     Literal(Literal<'a>),
     Reference(Reference<'a>),
-    Expression(Expression<'a>),
+    Expression(Box<Expression<'a>>),
 }
 
 pub fn expr(input: &str) -> IResult<&str, Expression> {
@@ -196,10 +196,9 @@ fn simple_value(input: &str) -> IResult<&str, Value> {
         map(literal, Value::Literal),
         map(reference, Value::Reference),
         // '(' expr ')'
-        map(
-            delimited(ws_r(char('(')), expr, ws_l(char(')'))),
-            Value::Expression,
-        ),
+        map(delimited(ws_r(char('(')), expr, ws_l(char(')'))), |v| {
+            Value::Expression(Box::new(v))
+        }),
     ))(input)
 }
 
@@ -313,22 +312,18 @@ fn op_g(input: &str) -> IResult<&str, Expression> {
 }
 
 fn op_h(input: &str) -> IResult<&str, Expression> {
-    alt((
-        dot,
-        index,
-        map(simple_value, |v| Expression::Value(Box::new(v))),
-    ))(input)
+    alt((dot, index, map(simple_value, Expression::Value)))(input)
 }
 
 fn dot(input: &str) -> IResult<&str, Expression> {
     map(
         separated_pair(simple_value, ws(char('.')), reference),
-        |(v, r)| Expression::Dot(Box::new(Expression::Value(Box::new(v))), r),
+        |(v, r)| Expression::Dot(Box::new(Expression::Value(v)), r),
     )(input)
 }
 
 fn maybe_expr(input: &str) -> IResult<&str, Expression> {
-    alt((expr, success(Expression::Value(Box::new(Value::None)))))(input)
+    alt((expr, success(Expression::Value(Value::None))))(input)
 }
 
 fn index_inner(input: &str) -> IResult<&str, Vec<Expression>> {
@@ -344,7 +339,7 @@ fn index_inner(input: &str) -> IResult<&str, Vec<Expression>> {
 fn index(input: &str) -> IResult<&str, Expression> {
     map(
         pair(
-            map(simple_value, |v| Expression::Value(Box::new(v))),
+            map(simple_value, Expression::Value),
             delimited(ws_r(char('[')), index_inner, ws_l(char(']'))),
         ),
         |(e, inner)| Expression::Index(Box::new(e), inner),
@@ -405,11 +400,11 @@ mod tests {
         let mut expected = HashMap::new();
         expected.insert(
             ObjectKey::Ident("_a"),
-            Expression::Value(Box::new(Value::Literal(Literal::Num(1.0)))),
+            Expression::Value(Value::Literal(Literal::Num(1.0))),
         );
         expected.insert(
             ObjectKey::Str("2_".to_owned()),
-            Expression::Value(Box::new(Value::Literal(Literal::Num(2.0)))),
+            Expression::Value(Value::Literal(Literal::Num(2.0))),
         );
         assert_eq!(object(r#"{ _a : 1, "2_":2 }"#), Ok(("", expected)));
         assert_eq!(object("{}"), Ok(("", HashMap::new())));
@@ -420,8 +415,8 @@ mod tests {
     #[test]
     fn test_array() {
         let expected = vec![
-            Expression::Value(Box::new(Value::Literal(Literal::Num(1.0)))),
-            Expression::Value(Box::new(Value::Literal(Literal::Num(3.0)))),
+            Expression::Value(Value::Literal(Literal::Num(1.0))),
+            Expression::Value(Value::Literal(Literal::Num(3.0))),
         ];
         assert_eq!(array("[ 1, 3 ]"), Ok(("", expected)));
         assert_eq!(array("[]"), Ok(("", vec![])));
@@ -441,26 +436,16 @@ mod tests {
                         BinaryOp::Sub,
                         Box::new(Expression::BinaryOp(
                             BinaryOp::Add,
-                            Box::new(Expression::Value(Box::new(Value::Literal(Literal::Num(
-                                1.0
-                            ))))),
+                            Box::new(Expression::Value(Value::Literal(Literal::Num(1.0)))),
                             Box::new(Expression::BinaryOp(
                                 BinaryOp::Mul,
-                                Box::new(Expression::Value(Box::new(Value::Literal(
-                                    Literal::Num(2.0)
-                                )))),
-                                Box::new(Expression::Value(Box::new(Value::Reference(
-                                    Reference::At
-                                ))))
+                                Box::new(Expression::Value(Value::Literal(Literal::Num(2.0)))),
+                                Box::new(Expression::Value(Value::Reference(Reference::At)))
                             ))
                         )),
-                        Box::new(Expression::Value(Box::new(Value::Literal(Literal::Num(
-                            4.0
-                        )))))
+                        Box::new(Expression::Value(Value::Literal(Literal::Num(4.0))))
                     )),
-                    Box::new(Expression::Value(Box::new(Value::Literal(Literal::Num(
-                        5.0
-                    )))))
+                    Box::new(Expression::Value(Value::Literal(Literal::Num(5.0))))
                 )
             ))
         )
@@ -473,14 +458,14 @@ mod tests {
             Ok((
                 "",
                 Expression::Fn(
-                    Box::new(Expression::Value(Box::new(Value::Reference(Reference::At)))),
+                    Box::new(Expression::Value(Value::Reference(Reference::At))),
                     vec![
-                        Expression::Value(Box::new(Value::Literal(Literal::Num(1.0)))),
-                        Expression::Value(Box::new(Value::Literal(Literal::Array(vec![
-                            Expression::Value(Box::new(Value::Literal(Literal::Num(3.0)))),
-                            Expression::Value(Box::new(Value::Literal(Literal::Num(3.0)))),
-                        ])))),
-                        Expression::Value(Box::new(Value::Literal(Literal::Num(7.0)))),
+                        Expression::Value(Value::Literal(Literal::Num(1.0))),
+                        Expression::Value(Value::Literal(Literal::Array(vec![
+                            Expression::Value(Value::Literal(Literal::Num(3.0))),
+                            Expression::Value(Value::Literal(Literal::Num(3.0))),
+                        ]))),
+                        Expression::Value(Value::Literal(Literal::Num(7.0))),
                     ]
                 )
             ))
@@ -494,10 +479,10 @@ mod tests {
             Ok((
                 "",
                 Expression::Index(
-                    Box::new(Expression::Value(Box::new(Value::Reference(Reference::At)))),
+                    Box::new(Expression::Value(Value::Reference(Reference::At))),
                     vec![
-                        Expression::Value(Box::new(Value::Literal(Literal::Num(1.0)))),
-                        Expression::Value(Box::new(Value::Reference(Reference::Dollar))),
+                        Expression::Value(Value::Literal(Literal::Num(1.0))),
+                        Expression::Value(Value::Reference(Reference::Dollar)),
                     ]
                 )
             ))
@@ -507,10 +492,10 @@ mod tests {
             Ok((
                 "",
                 Expression::Index(
-                    Box::new(Expression::Value(Box::new(Value::Reference(Reference::At)))),
+                    Box::new(Expression::Value(Value::Reference(Reference::At))),
                     vec![
-                        Expression::Value(Box::new(Value::None)),
-                        Expression::Value(Box::new(Value::None)),
+                        Expression::Value(Value::None),
+                        Expression::Value(Value::None),
                     ]
                 )
             ))
@@ -520,10 +505,10 @@ mod tests {
             Ok((
                 "",
                 Expression::Index(
-                    Box::new(Expression::Value(Box::new(Value::Reference(Reference::At)))),
+                    Box::new(Expression::Value(Value::Reference(Reference::At))),
                     vec![
-                        Expression::Value(Box::new(Value::Literal(Literal::Num(1.0)))),
-                        Expression::Value(Box::new(Value::None)),
+                        Expression::Value(Value::Literal(Literal::Num(1.0))),
+                        Expression::Value(Value::None),
                     ]
                 )
             ))
@@ -533,10 +518,10 @@ mod tests {
             Ok((
                 "",
                 Expression::Index(
-                    Box::new(Expression::Value(Box::new(Value::Reference(Reference::At)))),
+                    Box::new(Expression::Value(Value::Reference(Reference::At))),
                     vec![
-                        Expression::Value(Box::new(Value::None)),
-                        Expression::Value(Box::new(Value::Literal(Literal::Num(2.0)))),
+                        Expression::Value(Value::None),
+                        Expression::Value(Value::Literal(Literal::Num(2.0))),
                     ]
                 )
             ))
@@ -544,16 +529,13 @@ mod tests {
         // Invalid indexing will not consume the full input; this is considered an error.
         assert_eq!(
             expr("@[]"),
-            Ok((
-                "[]",
-                Expression::Value(Box::new(Value::Reference(Reference::At)))
-            ))
+            Ok(("[]", Expression::Value(Value::Reference(Reference::At))))
         );
         assert_eq!(
             expr("@[1:2:3]"),
             Ok((
                 "[1:2:3]",
-                Expression::Value(Box::new(Value::Reference(Reference::At)))
+                Expression::Value(Value::Reference(Reference::At))
             ))
         );
     }
