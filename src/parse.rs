@@ -195,7 +195,6 @@ fn simple_value(input: &str) -> IResult<&str, Value> {
     alt((
         map(literal, Value::Literal),
         map(reference, Value::Reference),
-        // '(' expr ')'
         map(delimited(ws_r(char('(')), expr, ws_l(char(')'))), |v| {
             Value::Expression(Box::new(v))
         }),
