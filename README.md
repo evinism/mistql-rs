@@ -1,3 +1,7 @@
+# MistQL: Query language for JSON-like structures
+
+This repo is an early WIP for a Rust implementation of [MistQL](https://www.mistql.com).
+
 ## License
 
 Licensed under either of
